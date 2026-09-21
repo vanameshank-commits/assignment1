@@ -16,17 +16,20 @@ public class SmokeDash : MonoBehaviour
     private CharacterController controller;
     public bool isDashing { get; private set; } // Let other scripts know we are dashing
     private float nextDashTime = 0f;
+    private StaminaSystem stamina;
 
     void Start()
     {
         controller = GetComponent<CharacterController>();
+        stamina = GetComponent<StaminaSystem>();
     }
 
     void Update()
     {
-        // Trigger dash on 'E' or Left Shift (change KeyCode as needed)
-        if (Input.GetKeyDown(KeyCode.E) && Time.time >= nextDashTime && !isDashing)
+        // Added stamina.CanDash() check
+        if (Input.GetKeyDown(KeyCode.E) && Time.time >= nextDashTime && !isDashing && stamina.CanDash())
         {
+            stamina.ConsumeDashStamina(); // Instantly removes the dash cost
             StartCoroutine(PerformDash());
         }
     }
