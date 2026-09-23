@@ -519,14 +519,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 711d53637997d1042ae5ed0de72cb36f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CameraOrbit
-  target: {fileID: 607328868}
-  distance: 5
-  heightOffset: 1.5
-  sensitivity: 3
-  minYAngle: -20
-  maxYAngle: 80
-  currentX: 0
-  currentY: 15
 --- !u!114 &330585549
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1681,7 +1673,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -0.85, y: 1.66, z: 7.44}
-  m_LocalScale: {x: 23.485, y: 1, z: 17.348}
+  m_LocalScale: {x: 41.669437, y: 1, z: 28.185293}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}

@@ -6,6 +6,7 @@ TagManager:
   tags:
   - SolidObstacle
   - Breakable
+  - Ground
   layers:
   - Default
   - TransparentFX

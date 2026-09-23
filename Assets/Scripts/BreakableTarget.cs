@@ -3,17 +3,23 @@ using UnityEngine;
 [RequireComponent(typeof(Collider))]
 public class BreakableTarget : MonoBehaviour, IBreakable
 {
-    [SerializeField] private Color prototypeGizmoColor = Color.red;
+    [Header("Optional Polish")]
+    [SerializeField] private GameObject brokenVFXPrefab;
+    [SerializeField] private AudioClip breakSFX;
 
-    private void OnDrawGizmos()
+    public void Break(Vector3 hitPoint, Vector3 hitDirection)
     {
-        Gizmos.color = prototypeGizmoColor;
-        Gizmos.DrawWireCube(transform.position, transform.localScale);
-    }
+        if (brokenVFXPrefab != null)
+        {
+            Instantiate(brokenVFXPrefab, hitPoint, Quaternion.LookRotation(hitDirection));
+        }
 
-    public void Break(Vector3 hitPoint, Vector3 direction)
-    {
-        Debug.Log($"[Breakable] Destroyed {gameObject.name} at {hitPoint}");
-        gameObject.SetActive(false); // Clean disable for prototyping
+        if (breakSFX != null)
+        {
+            AudioSource.PlayClipAtPoint(breakSFX, hitPoint);
+        }
+
+        // Disable object to complete destruction logic
+        gameObject.SetActive(false);
     }
 }
