@@ -6,15 +6,17 @@ public class StaminaSystem : MonoBehaviour
     [Header("Stamina Stats")]
     public float maxStamina = 100f;
     public float currentStamina;
-    public float runDrainRate = 15f; // How fast running drains the bar
-    public float dashCost = 30f;     // Chunk of stamina taken per dash
+    public float runDrainRate = 15f;
+    public float dashCost = 30f;
 
     [Header("Regeneration")]
     public float regenRate = 20f;
-    public float regenDelay = 1.2f;  // Delay before regenerating after use
+    public float regenDelay = 1.2f;
 
     [Header("UI Reference")]
     public Slider staminaSlider;
+    public CanvasGroup staminaCanvasGroup; // Controls the fading
+    public float fadeSpeed = 4f;           // How fast it fades in/out
 
     private float lastUseTime;
 
@@ -26,16 +28,30 @@ public class StaminaSystem : MonoBehaviour
             staminaSlider.maxValue = maxStamina;
             staminaSlider.value = currentStamina;
         }
+
+        // Start fully invisible if stamina is already full
+        if (staminaCanvasGroup != null)
+        {
+            staminaCanvasGroup.alpha = 0f;
+        }
     }
 
     void Update()
     {
-        // Regenerate stamina if enough time has passed since last use
+        // Regenerate stamina
         if (Time.time - lastUseTime > regenDelay && currentStamina < maxStamina)
         {
             currentStamina += regenRate * Time.deltaTime;
             currentStamina = Mathf.Clamp(currentStamina, 0, maxStamina);
             UpdateUI();
+        }
+
+        // Fade the UI in or out based on current stamina level
+        if (staminaCanvasGroup != null)
+        {
+            // If stamina is not full, target alpha is 1 (visible). If full, target is 0 (invisible).
+            float targetAlpha = (currentStamina < maxStamina) ? 1f : 0f;
+            staminaCanvasGroup.alpha = Mathf.MoveTowards(staminaCanvasGroup.alpha, targetAlpha, fadeSpeed * Time.deltaTime);
         }
     }
 

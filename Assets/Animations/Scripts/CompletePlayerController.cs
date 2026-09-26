@@ -5,6 +5,7 @@ using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(Animator))]
+[RequireComponent(typeof(StaminaSystem))] // Ensures the stamina script is attached
 public class CompletePlayerController : MonoBehaviour
 {
     [Header("Movement Speeds")]
@@ -24,6 +25,7 @@ public class CompletePlayerController : MonoBehaviour
 
     private Rigidbody rb;
     private Animator animator;
+    private StaminaSystem stamina; // Added Stamina System reference
 
     private bool canDash = true;
     private bool isDashing = false;
@@ -52,6 +54,7 @@ public class CompletePlayerController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
         animator = GetComponent<Animator>();
+        stamina = GetComponent<StaminaSystem>(); // Initialize Stamina System
 
         // Physics Safeguards
         rb.freezeRotation = true;
@@ -74,11 +77,19 @@ public class CompletePlayerController : MonoBehaviour
         float moveZ = Input.GetAxisRaw("Vertical");
 
         Vector3 inputDir = new Vector3(moveX, 0f, moveZ).normalized;
-        bool isSprinting = Input.GetKey(KeyCode.LeftShift);
+
+        // Added stamina check to running
+        bool isSprinting = Input.GetKey(KeyCode.LeftShift) && stamina.CanRun();
 
         // Movement Speed Selection
         float currentSpeedMultiplier = isSprinting ? runSpeed : walkSpeed;
         Vector3 movementVelocity = inputDir * currentSpeedMultiplier;
+
+        // Drain stamina if actively moving and sprinting
+        if (isSprinting && inputDir.sqrMagnitude > 0.01f)
+        {
+            stamina.DrainStaminaForRunning();
+        }
 
         // Linear velocity support for Unity 6+ (Use rb.velocity on older Unity versions)
         rb.linearVelocity = new Vector3(movementVelocity.x, rb.linearVelocity.y, movementVelocity.z);
@@ -98,9 +109,10 @@ public class CompletePlayerController : MonoBehaviour
 
         animator.SetFloat(SpeedHash, targetAnimSpeed, 0.05f, Time.deltaTime);
 
-        // Space Bar -> Initiate Dash Attack
-        if (Input.GetKeyDown(KeyCode.Space) && canDash)
+        // Space Bar -> Initiate Dash Attack (Added stamina check)
+        if (Input.GetKeyDown(KeyCode.Space) && canDash && stamina.CanDash())
         {
+            stamina.ConsumeDashStamina(); // Drain the dash cost
             Vector3 dashDirection = inputDir.sqrMagnitude > 0.01f ? inputDir : transform.forward;
             StartCoroutine(ExecuteDashAttack(dashDirection));
         }
