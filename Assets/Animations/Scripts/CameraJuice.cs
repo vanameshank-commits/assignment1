@@ -5,38 +5,41 @@ public class CameraJuice : MonoBehaviour
 {
     public static CameraJuice Instance { get; private set; }
 
-    private Vector3 originalPos;
-
     private void Awake()
     {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
     }
 
-    private void OnEnable()
-    {
-        originalPos = transform.localPosition;
-    }
-
-    public void Shake(float duration = 0.1f, float magnitude = 0.15f)
+    public void Shake(float duration, float magnitude)
     {
         StartCoroutine(ShakeRoutine(duration, magnitude));
     }
 
     private IEnumerator ShakeRoutine(float duration, float magnitude)
     {
+        Transform camTransform = Camera.main != null ? Camera.main.transform : null;
+        if (camTransform == null) yield break;
+
+        Vector3 startLocalPos = camTransform.localPosition;
         float elapsed = 0f;
 
         while (elapsed < duration)
         {
-            elapsed += Time.deltaTime;
             float x = Random.Range(-1f, 1f) * magnitude;
             float y = Random.Range(-1f, 1f) * magnitude;
 
-            transform.localPosition = originalPos + new Vector3(x, y, 0f);
+            camTransform.localPosition = startLocalPos + new Vector3(x, y, 0f);
+
+            // Use unscaledDeltaTime so the camera shakes even during time-freeze hit-stop
+            elapsed += Time.unscaledDeltaTime;
             yield return null;
         }
 
-        transform.localPosition = originalPos;
+        camTransform.localPosition = startLocalPos;
     }
 }

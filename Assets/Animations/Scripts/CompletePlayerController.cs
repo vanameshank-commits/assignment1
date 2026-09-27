@@ -33,12 +33,11 @@ public class CompletePlayerController : MonoBehaviour
     private bool canDash = true;
     private bool isDashing = false;
 
-    // Animator Parameter Hashes (Optimized lookup)
+    // Animator Parameter Hashes
     private static readonly int SpeedHash = Animator.StringToHash("Speed");
     private static readonly int DashTriggerHash = Animator.StringToHash("DashTrigger");
     private static readonly int AttackTriggerHash = Animator.StringToHash("AttackTrigger");
 
-    // Internal struct to queue breakable objects for mid-dash dynamic shattering
     private struct PendingBreakable
     {
         public IBreakable breakable;
@@ -59,15 +58,13 @@ public class CompletePlayerController : MonoBehaviour
         animator = GetComponent<Animator>();
         stamina = GetComponent<StaminaSystem>();
 
-        // Physics Safeguards
         rb.freezeRotation = true;
-        rb.useGravity = false; // Set to true if gravity is required for your setup
-        rb.interpolation = RigidbodyInterpolation.Interpolate; // Smooths movement
+        rb.useGravity = false;
+        rb.interpolation = RigidbodyInterpolation.Interpolate;
     }
 
     private void Update()
     {
-        // Lock controls during active dash state
         if (isDashing) return;
 
         HandleLocomotionInput();
@@ -81,29 +78,22 @@ public class CompletePlayerController : MonoBehaviour
 
         Vector3 inputDir = new Vector3(moveX, 0f, moveZ).normalized;
 
-        // Stamina-gated sprinting check
         bool isSprinting = Input.GetKey(KeyCode.LeftShift) && stamina.CanRun();
-
-        // Movement Speed Selection
         float currentSpeedMultiplier = isSprinting ? runSpeed : walkSpeed;
         Vector3 movementVelocity = inputDir * currentSpeedMultiplier;
 
-        // Drain stamina if actively moving and sprinting
         if (isSprinting && inputDir.sqrMagnitude > 0.01f)
         {
             stamina.DrainStaminaForRunning();
         }
 
-        // Linear velocity support for Unity 6+ (Use rb.velocity on older Unity versions)
         rb.linearVelocity = new Vector3(movementVelocity.x, rb.linearVelocity.y, movementVelocity.z);
 
-        // Rotation Smoothing
         if (inputDir.sqrMagnitude > 0.01f)
         {
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(inputDir), Time.deltaTime * 14f);
         }
 
-        // Drive Blend Tree Parameter: 0.0 = Idle, 0.5 = Walk, 1.0 = Run
         float targetAnimSpeed = 0f;
         if (inputDir.sqrMagnitude > 0.01f)
         {
@@ -112,7 +102,6 @@ public class CompletePlayerController : MonoBehaviour
 
         animator.SetFloat(SpeedHash, targetAnimSpeed, 0.05f, Time.deltaTime);
 
-        // Space Bar -> Initiate Dash Attack (Stamina checked and consumed)
         if (Input.GetKeyDown(KeyCode.Space) && canDash && stamina.CanDash())
         {
             stamina.ConsumeDashStamina();
@@ -123,7 +112,6 @@ public class CompletePlayerController : MonoBehaviour
 
     private void HandleCombatInput()
     {
-        // Right Click -> Standalone Melee Attack
         if (Input.GetMouseButtonDown(1))
         {
             animator.ResetTrigger(AttackTriggerHash);
@@ -136,20 +124,16 @@ public class CompletePlayerController : MonoBehaviour
         canDash = false;
         isDashing = true;
 
-        // Instantly align player rotation to dash vector
         transform.rotation = Quaternion.LookRotation(direction);
 
-        // Reset and fire dash animation trigger
         animator.ResetTrigger(DashTriggerHash);
         animator.SetTrigger(DashTriggerHash);
 
-        // Trigger footstep/dash dust burst facing opposite to movement vector
         if (dashDustPrefab != null)
         {
             Instantiate(dashDustPrefab, transform.position, Quaternion.LookRotation(-direction));
         }
 
-        // Trigger visual ghost trail if script component exists on Player
         if (TryGetComponent<DashAfterimage>(out var afterimage))
         {
             afterimage.TriggerGhostTrail();
@@ -160,67 +144,78 @@ public class CompletePlayerController : MonoBehaviour
             Vector3 startPos = transform.position;
             float effectiveDistance = dashDistance;
 
-            // Elevate cast origin to Y = 1.0 to prevent sphere radius from sweeping into the floor plane
-            Vector3 castOrigin = startPos + Vector3.up * 1.0f;
+            // Ground-level origin (Y = 0.5) to reliably hit crates resting on floor
+            Vector3 castOrigin = startPos + Vector3.up * 0.5f;
+
+            // 1. Check point-blank wall directly in front at start
+            if (Physics.Raycast(castOrigin, direction, out RaycastHit immediateSolidHit, playerRadius + skinWidth, solidObstacleMask, QueryTriggerInteraction.Ignore))
+            {
+                effectiveDistance = 0f;
+            }
 
             List<PendingBreakable> pendingBreakables = new List<PendingBreakable>();
             HashSet<IBreakable> trackedBreakables = new HashSet<IBreakable>();
 
-            // 1. Point-blank overlap check (Queued for frame 1 of movement to prevent premature destruction)
-            Collider[] immediateOverlaps = Physics.OverlapSphere(startPos, playerRadius, breakableMask);
-            foreach (var col in immediateOverlaps)
+            if (effectiveDistance > 0f)
             {
-                if (col != null)
+                // 2. Point-blank breakable overlap check at start point
+                Collider[] immediateOverlaps = Physics.OverlapSphere(castOrigin, playerRadius, breakableMask);
+                foreach (var col in immediateOverlaps)
                 {
-                    IBreakable breakable = col.GetComponentInParent<IBreakable>();
-                    if (breakable != null && trackedBreakables.Add(breakable))
+                    if (col != null)
                     {
-                        pendingBreakables.Add(new PendingBreakable(breakable, 0.1f, startPos));
+                        IBreakable breakable = col.GetComponentInParent<IBreakable>();
+                        if (breakable != null && trackedBreakables.Add(breakable))
+                        {
+                            pendingBreakables.Add(new PendingBreakable(breakable, 0.0f, startPos));
+                        }
+                    }
+                }
+
+                // 3. Predictive Swept SphereCast along path
+                LayerMask pathMask = solidObstacleMask | breakableMask;
+                RaycastHit[] hits = Physics.SphereCastAll(
+                    castOrigin,
+                    playerRadius,
+                    direction,
+                    dashDistance,
+                    pathMask,
+                    QueryTriggerInteraction.Ignore
+                );
+
+                Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+                foreach (RaycastHit hit in hits)
+                {
+                    if (hit.collider.transform == transform || hit.collider.transform.IsChildOf(transform))
+                        continue;
+
+                    int hitLayer = 1 << hit.collider.gameObject.layer;
+
+                    // Solid Obstacle -> Stop dash movement before reaching wall collider
+                    if ((hitLayer & solidObstacleMask) != 0)
+                    {
+                        float stopDistance = Mathf.Max(0f, hit.distance - skinWidth);
+                        effectiveDistance = Mathf.Min(effectiveDistance, stopDistance);
+                        break; // Ignore targets beyond solid wall
+                    }
+
+                    // Breakable Obstacle -> Queue for destruction if reached before solid obstacle
+                    if ((hitLayer & breakableMask) != 0)
+                    {
+                        if (hit.distance <= effectiveDistance)
+                        {
+                            IBreakable breakable = hit.collider.GetComponentInParent<IBreakable>();
+                            if (breakable != null && trackedBreakables.Add(breakable))
+                            {
+                                pendingBreakables.Add(new PendingBreakable(breakable, hit.distance, hit.point));
+                            }
+                        }
                     }
                 }
             }
 
-            // 2. Predictive Swept Raycasting using ground-safe origin
-            LayerMask pathMask = solidObstacleMask | breakableMask;
-            RaycastHit[] hits = Physics.SphereCastAll(
-                castOrigin,
-                playerRadius,
-                direction,
-                dashDistance,
-                pathMask,
-                QueryTriggerInteraction.Collide
-            );
-
-            // Sort hits chronologically by distance
-            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-
-            foreach (RaycastHit hit in hits)
-            {
-                // Filter out self and child colliders
-                if (hit.collider.transform == transform || hit.collider.transform.IsChildOf(transform))
-                    continue;
-
-                int hitLayer = 1 << hit.collider.gameObject.layer;
-
-                // Hit Solid Obstacle -> Clamp maximum dash movement distance
-                if ((hitLayer & solidObstacleMask) != 0)
-                {
-                    effectiveDistance = Mathf.Max(0f, hit.distance - (playerRadius + skinWidth));
-                    break; // Stop parsing targets beyond the solid wall
-                }
-
-                // Store breakables to shatter dynamically when player physically reaches them
-                if ((hitLayer & breakableMask) != 0 && hit.distance <= effectiveDistance)
-                {
-                    IBreakable breakable = hit.collider.GetComponentInParent<IBreakable>();
-                    if (breakable != null && trackedBreakables.Add(breakable))
-                    {
-                        pendingBreakables.Add(new PendingBreakable(breakable, hit.distance, hit.point));
-                    }
-                }
-            }
-
-            // 3. Physical Movement & Distance-Synced Shattering
+            // 4. Smooth Physical Interpolation & Distance-Synced Shattering
             Vector3 endPos = startPos + (direction * effectiveDistance);
             float elapsed = 0f;
 
@@ -232,16 +227,14 @@ public class CompletePlayerController : MonoBehaviour
                 Vector3 currentPos = Vector3.Lerp(startPos, endPos, t);
                 rb.MovePosition(currentPos);
 
-                // Calculate distance traveled from start position
                 float currentDistanceTraveled = Vector3.Distance(startPos, currentPos);
 
-                // Check if player has physically arrived at queued breakable targets
                 for (int i = pendingBreakables.Count - 1; i >= 0; i--)
                 {
                     if (currentDistanceTraveled >= pendingBreakables[i].distance)
                     {
                         pendingBreakables[i].breakable.Break(pendingBreakables[i].hitPoint, direction);
-                        pendingBreakables.RemoveAt(i); // Remove so object breaks only once
+                        pendingBreakables.RemoveAt(i);
                     }
                 }
 
@@ -250,7 +243,7 @@ public class CompletePlayerController : MonoBehaviour
 
             rb.MovePosition(endPos);
 
-            // Shatter any remaining queued items at final destination
+            // Shatter any remaining breakables reached at end position
             foreach (var item in pendingBreakables)
             {
                 item.breakable.Break(item.hitPoint, direction);
@@ -258,20 +251,17 @@ public class CompletePlayerController : MonoBehaviour
         }
         finally
         {
-            // Guarantees state unlock even if errors occur during physics operations
             isDashing = false;
         }
 
-        // Cooldown timer recovery
         yield return new WaitForSeconds(dashCooldown);
         canDash = true;
     }
 
     private void OnDrawGizmosSelected()
     {
-        // Visualizes ground-safe cast origin and player radius in Scene View
         Gizmos.color = Color.cyan;
-        Vector3 origin = transform.position + Vector3.up * 1.0f;
+        Vector3 origin = transform.position + Vector3.up * 0.5f;
         Gizmos.DrawWireSphere(origin, playerRadius);
         Gizmos.DrawRay(origin, transform.forward * dashDistance);
     }
