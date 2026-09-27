@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(Animator))]
@@ -25,6 +26,9 @@ public class CompletePlayerController : MonoBehaviour
     [Header("Detection Layers")]
     [SerializeField] private LayerMask solidObstacleMask;
     [SerializeField] private LayerMask breakableMask;
+
+    [Header("UI References")]
+    [SerializeField] private Image dashCooldownRing;
 
     private Rigidbody rb;
     private Animator animator;
@@ -61,6 +65,15 @@ public class CompletePlayerController : MonoBehaviour
         rb.freezeRotation = true;
         rb.useGravity = false;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
+    }
+
+    private void Start()
+    {
+        // Hide the cooldown ring when the game starts because the dash is fully ready
+        if (dashCooldownRing != null)
+        {
+            dashCooldownRing.gameObject.SetActive(false);
+        }
     }
 
     private void Update()
@@ -131,7 +144,8 @@ public class CompletePlayerController : MonoBehaviour
 
         if (dashDustPrefab != null)
         {
-            Instantiate(dashDustPrefab, transform.position, Quaternion.LookRotation(-direction));
+            GameObject dashVFX = Instantiate(dashDustPrefab, transform.position, Quaternion.LookRotation(-direction), transform);
+            Destroy(dashVFX, 1f);
         }
 
         if (TryGetComponent<DashAfterimage>(out var afterimage))
@@ -254,7 +268,35 @@ public class CompletePlayerController : MonoBehaviour
             isDashing = false;
         }
 
-        yield return new WaitForSeconds(dashCooldown);
+        // --- NEW UI COOLDOWN LOGIC ---
+        // Make the UI visible and empty the ring the moment the dash finishes
+        if (dashCooldownRing != null)
+        {
+            dashCooldownRing.gameObject.SetActive(true);
+            dashCooldownRing.fillAmount = 0f;
+        }
+
+        // Cooldown timer recovery with UI fill
+        float cooldownTimer = 0f;
+        while (cooldownTimer < dashCooldown)
+        {
+            cooldownTimer += Time.deltaTime;
+
+            if (dashCooldownRing != null)
+            {
+                // Calculates the percentage from 0.0 to 1.0 to fill the circle smoothly
+                dashCooldownRing.fillAmount = cooldownTimer / dashCooldown;
+            }
+
+            yield return null; // Wait until the next frame
+        }
+
+        // Hide the UI entirely when the cooldown is done
+        if (dashCooldownRing != null)
+        {
+            dashCooldownRing.gameObject.SetActive(false);
+        }
+
         canDash = true;
     }
 
