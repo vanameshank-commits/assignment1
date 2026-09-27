@@ -5,7 +5,7 @@ using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(Animator))]
-[RequireComponent(typeof(StaminaSystem))] // Ensures the stamina script is attached
+[RequireComponent(typeof(StaminaSystem))]
 public class CompletePlayerController : MonoBehaviour
 {
     [Header("Movement Speeds")]
@@ -19,13 +19,16 @@ public class CompletePlayerController : MonoBehaviour
     [SerializeField] private float playerRadius = 0.5f;
     [SerializeField] private float skinWidth = 0.05f;
 
+    [Header("Visual Effects")]
+    [SerializeField] private GameObject dashDustPrefab;
+
     [Header("Detection Layers")]
     [SerializeField] private LayerMask solidObstacleMask;
     [SerializeField] private LayerMask breakableMask;
 
     private Rigidbody rb;
     private Animator animator;
-    private StaminaSystem stamina; // Added Stamina System reference
+    private StaminaSystem stamina;
 
     private bool canDash = true;
     private bool isDashing = false;
@@ -54,7 +57,7 @@ public class CompletePlayerController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
         animator = GetComponent<Animator>();
-        stamina = GetComponent<StaminaSystem>(); // Initialize Stamina System
+        stamina = GetComponent<StaminaSystem>();
 
         // Physics Safeguards
         rb.freezeRotation = true;
@@ -78,7 +81,7 @@ public class CompletePlayerController : MonoBehaviour
 
         Vector3 inputDir = new Vector3(moveX, 0f, moveZ).normalized;
 
-        // Added stamina check to running
+        // Stamina-gated sprinting check
         bool isSprinting = Input.GetKey(KeyCode.LeftShift) && stamina.CanRun();
 
         // Movement Speed Selection
@@ -109,10 +112,10 @@ public class CompletePlayerController : MonoBehaviour
 
         animator.SetFloat(SpeedHash, targetAnimSpeed, 0.05f, Time.deltaTime);
 
-        // Space Bar -> Initiate Dash Attack (Added stamina check)
+        // Space Bar -> Initiate Dash Attack (Stamina checked and consumed)
         if (Input.GetKeyDown(KeyCode.Space) && canDash && stamina.CanDash())
         {
-            stamina.ConsumeDashStamina(); // Drain the dash cost
+            stamina.ConsumeDashStamina();
             Vector3 dashDirection = inputDir.sqrMagnitude > 0.01f ? inputDir : transform.forward;
             StartCoroutine(ExecuteDashAttack(dashDirection));
         }
@@ -140,6 +143,12 @@ public class CompletePlayerController : MonoBehaviour
         animator.ResetTrigger(DashTriggerHash);
         animator.SetTrigger(DashTriggerHash);
 
+        // Trigger footstep/dash dust burst facing opposite to movement vector
+        if (dashDustPrefab != null)
+        {
+            Instantiate(dashDustPrefab, transform.position, Quaternion.LookRotation(-direction));
+        }
+
         // Trigger visual ghost trail if script component exists on Player
         if (TryGetComponent<DashAfterimage>(out var afterimage))
         {
@@ -151,16 +160,23 @@ public class CompletePlayerController : MonoBehaviour
             Vector3 startPos = transform.position;
             float effectiveDistance = dashDistance;
 
-            // Elevate cast origin to $Y = 1.0$ to prevent sphere radius from sweeping into the floor plane
+            // Elevate cast origin to Y = 1.0 to prevent sphere radius from sweeping into the floor plane
             Vector3 castOrigin = startPos + Vector3.up * 1.0f;
 
-            // 1. Point-blank overlap check for immediate collision bounds
+            List<PendingBreakable> pendingBreakables = new List<PendingBreakable>();
+            HashSet<IBreakable> trackedBreakables = new HashSet<IBreakable>();
+
+            // 1. Point-blank overlap check (Queued for frame 1 of movement to prevent premature destruction)
             Collider[] immediateOverlaps = Physics.OverlapSphere(startPos, playerRadius, breakableMask);
             foreach (var col in immediateOverlaps)
             {
-                if (col != null && col.TryGetComponent<IBreakable>(out var breakable))
+                if (col != null)
                 {
-                    breakable.Break(startPos, direction);
+                    IBreakable breakable = col.GetComponentInParent<IBreakable>();
+                    if (breakable != null && trackedBreakables.Add(breakable))
+                    {
+                        pendingBreakables.Add(new PendingBreakable(breakable, 0.1f, startPos));
+                    }
                 }
             }
 
@@ -177,8 +193,6 @@ public class CompletePlayerController : MonoBehaviour
 
             // Sort hits chronologically by distance
             Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-
-            List<PendingBreakable> pendingBreakables = new List<PendingBreakable>();
 
             foreach (RaycastHit hit in hits)
             {
@@ -198,7 +212,8 @@ public class CompletePlayerController : MonoBehaviour
                 // Store breakables to shatter dynamically when player physically reaches them
                 if ((hitLayer & breakableMask) != 0 && hit.distance <= effectiveDistance)
                 {
-                    if (hit.collider.TryGetComponent<IBreakable>(out var breakable))
+                    IBreakable breakable = hit.collider.GetComponentInParent<IBreakable>();
+                    if (breakable != null && trackedBreakables.Add(breakable))
                     {
                         pendingBreakables.Add(new PendingBreakable(breakable, hit.distance, hit.point));
                     }
@@ -235,7 +250,7 @@ public class CompletePlayerController : MonoBehaviour
 
             rb.MovePosition(endPos);
 
-            // Shatter any remaining queued items at final position destination
+            // Shatter any remaining queued items at final destination
             foreach (var item in pendingBreakables)
             {
                 item.breakable.Break(item.hitPoint, direction);
