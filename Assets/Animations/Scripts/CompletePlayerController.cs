@@ -20,8 +20,9 @@ public class CompletePlayerController : MonoBehaviour
     [SerializeField] private float playerRadius = 0.5f;
     [SerializeField] private float skinWidth = 0.05f;
 
-    [Header("Visual Effects")]
+    [Header("Visual & Audio Effects")]
     [SerializeField] private GameObject dashDustPrefab;
+    [SerializeField] private AudioClip dashSFX; // Added Dash Audio Clip
 
     [Header("Detection Layers")]
     [SerializeField] private LayerMask solidObstacleMask;
@@ -141,6 +142,12 @@ public class CompletePlayerController : MonoBehaviour
 
         animator.ResetTrigger(DashTriggerHash);
         animator.SetTrigger(DashTriggerHash);
+
+        // --- NEW: Play Dash Audio ---
+        if (dashSFX != null)
+        {
+            AudioSource.PlayClipAtPoint(dashSFX, transform.position, 1.0f);
+        }
 
         if (dashDustPrefab != null)
         {
@@ -268,7 +275,6 @@ public class CompletePlayerController : MonoBehaviour
             isDashing = false;
         }
 
-        // --- NEW UI COOLDOWN LOGIC ---
         // Make the UI visible and empty the ring the moment the dash finishes
         if (dashCooldownRing != null)
         {
@@ -284,11 +290,10 @@ public class CompletePlayerController : MonoBehaviour
 
             if (dashCooldownRing != null)
             {
-                // Calculates the percentage from 0.0 to 1.0 to fill the circle smoothly
                 dashCooldownRing.fillAmount = cooldownTimer / dashCooldown;
             }
 
-            yield return null; // Wait until the next frame
+            yield return null;
         }
 
         // Hide the UI entirely when the cooldown is done

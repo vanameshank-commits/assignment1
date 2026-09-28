@@ -5688,6 +5688,7 @@ MonoBehaviour:
   playerRadius: 0.5
   skinWidth: 0.05
   dashDustPrefab: {fileID: 1781949194303238870, guid: e92a0207ed6f749459a3646c2aaf3cd9, type: 3}
+  dashSFX: {fileID: 8300000, guid: 8a785e4bea035a3468ccc3becb75f682, type: 3}
   solidObstacleMask:
     serializedVersion: 2
     m_Bits: 128
