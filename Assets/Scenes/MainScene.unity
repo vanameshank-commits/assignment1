@@ -5290,7 +5290,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 557f0c602411faa439d97c5669bf82b2, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0
+      value: 0.033
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 557f0c602411faa439d97c5669bf82b2, type: 3}
       propertyPath: m_LocalPosition.z
@@ -5682,8 +5682,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CompletePlayerController
   walkSpeed: 3.5
   runSpeed: 7
-  dashDistance: 1.06
-  dashDuration: 0.12
+  dashDistance: 3
+  dashDuration: 1
   dashCooldown: 0.6
   playerRadius: 0.5
   skinWidth: 0.05
