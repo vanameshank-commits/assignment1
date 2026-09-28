@@ -19,6 +19,9 @@ public class BreakableTarget : MonoBehaviour, IBreakable
     [SerializeField] private float explosionForce = 500f;
     [SerializeField] private float explosionRadius = 3f;
 
+    [Header("Respawn")]
+    [SerializeField] private float respawnTime = 3f; // Time until the box reappears
+
     private Collider targetCollider;
     private Renderer targetRenderer;
 
@@ -30,7 +33,7 @@ public class BreakableTarget : MonoBehaviour, IBreakable
 
     private void OnEnable()
     {
-        // Reset collider and renderer visibility when re-activated by spawner
+        // Reset collider and renderer visibility when activated
         if (targetCollider != null) targetCollider.enabled = true;
         if (targetRenderer != null) targetRenderer.enabled = true;
     }
@@ -56,14 +59,15 @@ public class BreakableTarget : MonoBehaviour, IBreakable
             CameraJuice.Instance?.Shake(0.1f, 0.25f);
         }
 
-        // 3. Spawn Wood Particle Burst
+        // 3. Spawn Wood Particle Burst (and destroy it after 2 seconds)
         if (explosionVFXPrefab != null)
         {
             Quaternion spawnRotation = hitDirection != Vector3.zero
                 ? Quaternion.LookRotation(hitDirection)
                 : Quaternion.identity;
 
-            Instantiate(explosionVFXPrefab, hitPoint, spawnRotation);
+            GameObject vfxInstance = Instantiate(explosionVFXPrefab, hitPoint, spawnRotation);
+            Destroy(vfxInstance, 2.0f); // Prevents VFX from cluttering the hierarchy
         }
 
         // 4. Spawn Physical Debris Rigidbodies
@@ -85,17 +89,22 @@ public class BreakableTarget : MonoBehaviour, IBreakable
         if (targetCollider != null) targetCollider.enabled = false;
         if (targetRenderer != null) targetRenderer.enabled = false;
 
-        // Run hit-stop while object is still active in hierarchy
-        StartCoroutine(HitStopRoutine());
+        // Run hit-stop and handle the respawn timer
+        StartCoroutine(HitStopAndRespawnRoutine());
     }
 
-    private IEnumerator HitStopRoutine()
+    private IEnumerator HitStopAndRespawnRoutine()
     {
+        // 1. Hit-stop effect
         Time.timeScale = 0.05f;
         yield return new WaitForSecondsRealtime(0.03f);
         Time.timeScale = 1.0f;
 
-        // Safely deactivate GameObject after time scale is restored (ready for spawner pooling)
-        gameObject.SetActive(false);
+        // 2. Wait for the respawn time
+        yield return new WaitForSeconds(respawnTime);
+
+        // 3. Respawn the box
+        if (targetCollider != null) targetCollider.enabled = true;
+        if (targetRenderer != null) targetRenderer.enabled = true;
     }
 }
